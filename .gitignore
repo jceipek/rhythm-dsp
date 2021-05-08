@@ -1,0 +1,4 @@
+.vscode
+zig-cache/
+NUL
+.DS_Store
