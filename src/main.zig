@@ -8,6 +8,7 @@ const builtin = @import("builtin");
 const sg    = @import("sokol").gfx;
 const sapp  = @import("sokol").app;
 const sgapp = @import("sokol").app_gfx_glue;
+const dsplib = @import("dsplib/dsplib.zig");
 
 const libname = switch (builtin.os.tag) {
     .linux, .freebsd, .openbsd => "invalid_so.so",
@@ -18,14 +19,14 @@ const libname = switch (builtin.os.tag) {
 
 const Dsplib = struct {
     lib: ?*std.DynLib = null,
-    add: ?fn (i32, i32) callconv(.C) i32 = null,
+    api: ?dsplib.API = null,
     last_modified: i128 = 0,
 
     fn _load(self: *Dsplib, path: []const u8) !void {
         var lib = try std.DynLib.open(path);
-        var add = lib.lookup(fn (i32, i32) callconv(.C) i32, "add") orelse return error.SymbolNotFound;
+        var api = lib.lookup(*dsplib.API, "DSP") orelse return error.SymbolNotFound;
         self.lib = &lib;
-        self.add = add;
+        self.api = api.*;
     }
 
     pub fn load() !Dsplib {
@@ -44,23 +45,30 @@ const Dsplib = struct {
             // XXX: close and load don't guarantee that the library is a new library
             // This is super annoying, so we duplicate to a new file with a name that is the
             // new timestamp.
-            // TODO: delete the old file.
-            const currDir = std.fs.cwd();
+            const curr_dir = std.fs.cwd();
             var buf: [100]u8 = undefined;
-            const newName = std.fmt.bufPrint(&buf, "{d}", .{ new_time }) catch return;
-            currDir.copyFile(libname, currDir, newName, .{}) catch return;
-            self._load(newName) catch return;
+            const new_name = std.fmt.bufPrint(&buf, "{d}", .{ new_time }) catch return;
+            curr_dir.copyFile(libname, curr_dir, new_name, .{}) catch return;
+            self._load(new_name) catch return;
 
-            const addition = self.add.?(1,2);
-            stdout.print("Reloaded! {d} {d}\n", .{new_time, addition}) catch return;
-
+            stdout.print("Reloaded! {s}\n", .{new_name}) catch return;
             self.last_modified = new_time;
         }
     }
     pub fn close(self: *Dsplib) void {
-        self.lib.?.close();
-
         const stdout = std.io.getStdOut().writer();
+        if (self.lib) |lib| {
+            lib.close();
+            const curr_dir = std.fs.cwd();
+            if (self.last_modified != 0) {
+                var buf: [100]u8 = undefined;
+                const old_name = std.fmt.bufPrint(&buf, "{d}", .{ self.last_modified }) catch return;
+                stdout.print("Deleting! {s}\n", .{old_name}) catch return;
+                curr_dir.deleteFile(old_name) catch return;
+                self.last_modified = 0;
+            }
+        }
+
         stdout.print("Unloaded!\n", .{}) catch return;
     }
 };
@@ -74,8 +82,8 @@ const state = struct {
 
 fn dsplibModTime() !i128 {
     // Open the lib and see what the last modification time was!
-    const currDir = std.fs.cwd();
-    const file = try currDir.openFile(libname, .{ .read = false, .write = false });
+    const curr_dir = std.fs.cwd();
+    const file = try curr_dir.openFile(libname, .{ .read = false, .write = false });
     defer file.close();
     const stat = try file.stat();
     const mod_time = stat.mtime;
@@ -114,12 +122,14 @@ var lastRes: i32 = 0;
 export fn frame() void {
     loaded_lib.reloadIfNeeded();
 
-    const v = loaded_lib.add.?(1,2);
-    if (lastRes != v) {
-        const stdout = std.io.getStdOut().writer();
-        stdout.print("Hello, {d}!\n", .{v}) catch return;
-        lastRes = v;
-    }
+    if (loaded_lib.api) |api| {
+        const v = api.add(1,2);
+        if (lastRes != v) {
+            const stdout = std.io.getStdOut().writer();
+            stdout.print("Hello, {d}!\n", .{v}) catch return;
+            lastRes = v;
+        }
+    } 
 
     // default pass-action clears to grey
     sg.beginDefaultPass(.{}, sapp.width(), sapp.height());
