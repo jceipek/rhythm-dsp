@@ -75,9 +75,18 @@ fn buildExample(b: *bld.Builder, sokol: *bld.LibExeObjStep, comptime name: []con
     b.step(name, "Run the app").dependOn(&e.run().step);
 }
 
+fn buildWavRead(b: *bld.Builder, comptime name: []const u8) void {
+    const mode = b.standardReleaseOptions();
+    const e = b.addExecutable("wavreader", "src/dsplib/readwav.zig");
+    e.setBuildMode(mode);
+    e.install();
+    b.step(name, "Read a wave file").dependOn(&e.run().step);
+}
+
 pub fn build(b: *Builder) void {
     const sokol = buildSokol(b, "");
     buildDsplib(b, "dsp");
     buildDsplib(b, "dsp2");
     buildExample(b, sokol, "run");
+    buildWavRead(b, "readwav");
 }
