@@ -97,6 +97,20 @@ export fn init() void {
         .context = sgapp.context()
     });
 
+    var img_data = [_]u16{0} ** 128;
+
+    img_data[20] = 65000/2;
+    img_data[50] = 65000;
+
+    var img_desc = sg.ImageDesc {
+        .width = 128,
+        .height=1,
+        .pixel_format = .R16
+    };
+    img_desc.data.subimage[0][0] = sg.asRange(img_data);
+
+    const img = sg.makeImage(img_desc);
+
     // create vertex buffer with triangle vertices
     const vertices = [_]f32 {
         // positions         colors
@@ -111,6 +125,7 @@ export fn init() void {
     state.bind.vertex_buffers[0] = sg.makeBuffer(.{
         .data = sg.asRange(vertices)
     });
+    state.bind.fs_images[0] = img;
 
     // create a shader and pipeline object
     const shd = sg.makeShader(shaderDesc());
@@ -237,17 +252,21 @@ fn shaderDesc() sg.ShaderDesc {
             desc.fs.source =
                 \\ #include <metal_stdlib>
                 \\ using namespace metal;
-                \\ fragment float4 _main(float2 uv [[stage_in]]) {
+                \\ fragment float4 _main(float2 uv [[stage_in]], texture2d<float> tex [[texture(0)]], sampler texSmplr [[sampler(0)]]) {
                 \\
                 \\   //color.g = sin(color.r*100.0);
                 \\   //color.r = 0.0;
-                \\   float4 color = float4(0.0, 0.0, 0.0, 1.0);
+                \\   //float4 color = float4(0.0, 0.0, 0.0, 1.0);
                 \\   //color.b = abs((uv.y + 1.0) * 2.0 - sin(uv.x*100.0));
-                \\   color.b = abs(uv.y*20.0 - (sin(uv.x*100.0)+1.0)*0.5 * 0.1) > 0.5? 0.0 : 1.0;
-                \\
+                \\   //color.b = abs(uv.y*20.0 - (sin(uv.x*100.0)+1.0)*0.5 * 0.1) > 0.5? 0.0 : 1.0;
+                \\   float val = tex.sample(texSmplr, float2(uv.x, 0.5)).r > uv.y? 1.0 : 0.0;
+                \\   float4 color = float4(val, val, val, 1.0);
                 \\   return color;
                 \\ };
                 ;
+            desc.fs.images[0].name = "tex";
+            desc.fs.images[0].image_type = ._2D;
+            desc.fs.images[0].sampler_type = .FLOAT;
         },
         else => {}
     }
