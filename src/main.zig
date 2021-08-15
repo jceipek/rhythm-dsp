@@ -100,9 +100,13 @@ export fn init() void {
     // create vertex buffer with triangle vertices
     const vertices = [_]f32 {
         // positions         colors
-         0.0,  0.5, 0.5,     1.0, 0.0, 0.0, 1.0,
-         0.5, -0.5, 0.5,     0.0, 1.0, 0.0, 1.0,
-        -0.5, -0.5, 0.5,     0.0, 0.0, 1.0, 1.0
+          1.0,  1.0, 0.0,     1.0, 1.0,
+         -1.0,  1.0, 0.0,     0.0, 1.0,
+         -1.0, -1.0, 0.0,     0.0, 0.0,
+
+          1.0,  1.0, 0.0,     1.0, 1.0,
+         -1.0, -1.0, 0.0,     0.0, 0.0,
+          1.0, -1.0, 0.0,     1.0, 0.0,
     };
     state.bind.vertex_buffers[0] = sg.makeBuffer(.{
         .data = sg.asRange(vertices)
@@ -114,7 +118,7 @@ export fn init() void {
         .shader = shd
     };
     pip_desc.layout.attrs[0].format = .FLOAT3;
-    pip_desc.layout.attrs[1].format = .FLOAT4;
+    pip_desc.layout.attrs[1].format = .FLOAT2;
     state.pip = sg.makePipeline(pip_desc);
 }
 
@@ -135,7 +139,7 @@ export fn frame() void {
     sg.beginDefaultPass(.{}, sapp.width(), sapp.height());
     sg.applyPipeline(state.pip);
     sg.applyBindings(state.bind);
-    sg.draw(0, 3, 1);
+    sg.draw(0, 6, 1);
     sg.endPass();
     sg.commit();
 }
@@ -217,23 +221,30 @@ fn shaderDesc() sg.ShaderDesc {
                 \\ using namespace metal;
                 \\ struct vs_in {
                 \\   float4 position [[attribute(0)]];
-                \\   float4 color [[attribute(1)]];
+                \\   float2 uv [[attribute(1)]];
                 \\ };
                 \\ struct vs_out {
                 \\   float4 position [[position]];
-                \\   float4 color;
+                \\   float2 uv;
                 \\ };
                 \\ vertex vs_out _main(vs_in inp [[stage_in]]) {
                 \\   vs_out outp;
                 \\   outp.position = inp.position;
-                \\   outp.color = inp.color;
+                \\   outp.uv = inp.uv;
                 \\   return outp;
                 \\ }
                 ;
             desc.fs.source =
                 \\ #include <metal_stdlib>
                 \\ using namespace metal;
-                \\ fragment float4 _main(float4 color [[stage_in]]) {
+                \\ fragment float4 _main(float2 uv [[stage_in]]) {
+                \\
+                \\   //color.g = sin(color.r*100.0);
+                \\   //color.r = 0.0;
+                \\   float4 color = float4(0.0, 0.0, 0.0, 1.0);
+                \\   //color.b = abs((uv.y + 1.0) * 2.0 - sin(uv.x*100.0));
+                \\   color.b = abs(uv.y*20.0 - (sin(uv.x*100.0)+1.0)*0.5 * 0.1) > 0.5? 0.0 : 1.0;
+                \\
                 \\   return color;
                 \\ };
                 ;
