@@ -1,4 +1,8 @@
-const Builder = @import("std").build.Builder;
+const std = @import("std");
+const Builder = std.build.Builder;
+const CrossTarget = @import("std").zig.CrossTarget;
+const Mode = std.builtin.Mode;
+const LibExeObjStep = std.build.LibExeObjStep;
 
 
 const bld = @import("std").build;
@@ -15,10 +19,11 @@ fn macosAddSdkDirs(b: *bld.Builder, step: *bld.LibExeObjStep) !void {
 }
 
 // build sokol into a static library
-pub fn buildSokol(b: *bld.Builder, comptime prefix_path: []const u8) *bld.LibExeObjStep {
+pub fn buildSokol(b: *Builder, target: CrossTarget, mode: Mode, comptime prefix_path: []const u8) *LibExeObjStep {
     const lib = b.addStaticLibrary("sokol", null);
+    lib.setBuildMode(mode);
+    lib.setTarget(target);
     lib.linkLibC();
-    lib.setBuildMode(b.standardReleaseOptions());
     const sokol_path = prefix_path ++ "src/sokol/c/";
     const csources = [_][]const u8 {
         "sokol_app.c",
@@ -30,7 +35,7 @@ pub fn buildSokol(b: *bld.Builder, comptime prefix_path: []const u8) *bld.LibExe
         "sokol_shape.c",
     };
     if (lib.target.isDarwin()) {
-        macosAddSdkDirs(b, lib) catch unreachable;
+        b.env_map.put("ZIG_SYSTEM_LINKER_HACK", "1") catch unreachable;
         inline for (csources) |csrc| {
             lib.addCSourceFile(sokol_path ++ csrc, &[_][]const u8{"-ObjC", "-DIMPL"});
         }
@@ -49,6 +54,14 @@ pub fn buildSokol(b: *bld.Builder, comptime prefix_path: []const u8) *bld.LibExe
             lib.linkSystemLibrary("Xcursor");
             lib.linkSystemLibrary("GL");
             lib.linkSystemLibrary("asound");
+        }
+        else if (lib.target.isWindows()) {
+            lib.linkSystemLibrary("kernel32");
+            lib.linkSystemLibrary("user32");
+            lib.linkSystemLibrary("gdi32");
+            lib.linkSystemLibrary("ole32");
+            lib.linkSystemLibrary("d3d11");
+            lib.linkSystemLibrary("dxgi");
         }
     }
     return lib;
@@ -84,7 +97,9 @@ fn buildWavRead(b: *bld.Builder, comptime name: []const u8) void {
 }
 
 pub fn build(b: *Builder) void {
-    const sokol = buildSokol(b, "");
+    const target = b.standardTargetOptions(.{});
+    const mode = b.standardReleaseOptions();
+    const sokol = buildSokol(b, target, mode, "");
     buildDsplib(b, "dsp");
     buildDsplib(b, "dsp2");
     buildExample(b, sokol, "run");
