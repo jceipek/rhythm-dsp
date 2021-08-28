@@ -91,8 +91,6 @@ fn dsplibModTime() !i128 {
 }
 
 export fn init() void {
-    loaded_lib = Dsplib.load() catch return;
-
     sg.setup(.{
         .context = sgapp.context()
     });
@@ -164,7 +162,12 @@ export fn cleanup() void {
     sg.shutdown();
 }
 
-pub fn main() void {
+pub fn main() !void {
+    const stdout = std.io.getStdOut().writer();
+    loaded_lib = Dsplib.load() catch |err| {
+        try stdout.print("Unable to load Dsplib ({s}). Did you zig build dsp?\n", .{err});
+        return;
+    };
     sapp.run(.{
         .init_cb = init,
         .frame_cb = frame,
