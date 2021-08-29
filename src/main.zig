@@ -76,7 +76,7 @@ const Dsplib = struct {
 var loaded_lib: Dsplib = .{};
 
 const FsParams = extern struct {
-    var frameCount: u64 = 0;
+    frameCount: u64 = 0,
 };
 
 const state = struct {
@@ -144,7 +144,8 @@ var lastRes: i32 = 0;
 
 export fn frame() void {
     loaded_lib.reloadIfNeeded();
-    state.fs_params.frameCount += 1;
+    // Add with overflow
+    state.fs_params.frameCount +%= 1;
 
     if (loaded_lib.api) |api| {
         const v = api.add(1,2);
@@ -270,8 +271,9 @@ fn shaderDesc() sg.ShaderDesc {
                 \\   uint64_t frameCount;
                 \\ };
                 \\
-                \\ fragment float4 _main(float2 uv [[stage_in]], texture2d<float> tex [[texture(0)]], sampler texSmplr [[sampler(0)]], constant params& frameCount [[buffer(0)]]) {
-                \\   float val = tex.sample(texSmplr, float2(uv.x, 0.5)).r > uv.y? 1.0 : 0.0;
+                \\ fragment float4 _main(float2 uv [[stage_in]], texture2d<float> tex [[texture(0)]], sampler texSmplr [[sampler(0)]], constant params& params [[buffer(0)]]) {
+                \\   float move = (sin(float(params.frameCount) * 0.1)+1.0)*0.5;
+                \\   float val = tex.sample(texSmplr, float2(uv.x, 0.5)).r * move > uv.y? 1.0 : 0.0;
                 \\   float4 color = float4(val, val, val, 1.0);
                 \\   return color;
                 \\ };
