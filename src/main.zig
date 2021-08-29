@@ -75,9 +75,14 @@ const Dsplib = struct {
 
 var loaded_lib: Dsplib = .{};
 
+const FsParams = extern struct {
+    var frameCount: u64 = 0;
+};
+
 const state = struct {
     var bind: sg.Bindings = .{};
     var pip: sg.Pipeline = .{};
+    var fs_params: FsParams = .{};
 };
 
 fn dsplibModTime() !i128 {
@@ -136,8 +141,10 @@ export fn init() void {
 }
 
 var lastRes: i32 = 0;
+
 export fn frame() void {
     loaded_lib.reloadIfNeeded();
+    state.fs_params.frameCount += 1;
 
     if (loaded_lib.api) |api| {
         const v = api.add(1,2);
@@ -151,6 +158,10 @@ export fn frame() void {
     // default pass-action clears to grey
     sg.beginDefaultPass(.{}, sapp.width(), sapp.height());
     sg.applyPipeline(state.pip);
+    // sg.applyUniforms(.FS, 0, .{.ptr = &FsParams, .size = @sizeOf(@TypeOf(FsParams))});
+    sg.applyUniforms(.FS, 0, sg.asRange(state.fs_params));
+    
+    // sg.applyUniforms(.FS, 0, );
     sg.applyBindings(state.bind);
     sg.draw(0, 6, 1);
     sg.endPass();
@@ -255,13 +266,11 @@ fn shaderDesc() sg.ShaderDesc {
             desc.fs.source =
                 \\ #include <metal_stdlib>
                 \\ using namespace metal;
-                \\ fragment float4 _main(float2 uv [[stage_in]], texture2d<float> tex [[texture(0)]], sampler texSmplr [[sampler(0)]]) {
+                \\ struct params {
+                \\   uint64_t frameCount;
+                \\ };
                 \\
-                \\   //color.g = sin(color.r*100.0);
-                \\   //color.r = 0.0;
-                \\   //float4 color = float4(0.0, 0.0, 0.0, 1.0);
-                \\   //color.b = abs((uv.y + 1.0) * 2.0 - sin(uv.x*100.0));
-                \\   //color.b = abs(uv.y*20.0 - (sin(uv.x*100.0)+1.0)*0.5 * 0.1) > 0.5? 0.0 : 1.0;
+                \\ fragment float4 _main(float2 uv [[stage_in]], texture2d<float> tex [[texture(0)]], sampler texSmplr [[sampler(0)]], constant params& frameCount [[buffer(0)]]) {
                 \\   float val = tex.sample(texSmplr, float2(uv.x, 0.5)).r > uv.y? 1.0 : 0.0;
                 \\   float4 color = float4(val, val, val, 1.0);
                 \\   return color;
@@ -270,6 +279,8 @@ fn shaderDesc() sg.ShaderDesc {
             desc.fs.images[0].name = "tex";
             desc.fs.images[0].image_type = ._2D;
             desc.fs.images[0].sampler_type = .FLOAT;
+            desc.fs.uniform_blocks[0].size = @sizeOf(FsParams);
+            desc.fs.uniform_blocks[0].uniforms[0].name = "frameCount";
         },
         else => {}
     }
